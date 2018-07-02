@@ -1,15 +1,15 @@
 
-//    The direction of the car's movement
-//  ENA   ENB   IN1   IN2   IN3   IN4   Description
-//  HIGH  HIGH  HIGH  LOW   LOW   HIGH  Car is runing forward
-//  HIGH  HIGH  LOW   HIGH  HIGH  LOW   Car is runing back
-//  HIGH  HIGH  LOW   HIGH  LOW   HIGH  Car is turning left
-//  HIGH  HIGH  HIGH  LOW   HIGH  LOW   Car is turning right
-//  HIGH  HIGH  LOW   LOW   LOW   LOW   Car is stoped
-//  HIGH  HIGH  HIGH  HIGH  HIGH  HIGH  Car is stoped
-//  LOW   LOW   N/A   N/A   N/A   N/A   Car is stoped
+// the direction of the car's movement
+// ENA   ENB   IN1   IN2   IN3   IN4   Description
+// HIGH  HIGH  HIGH  LOW   LOW   HIGH  Car is runing forward
+// HIGH  HIGH  LOW   HIGH  HIGH  LOW   Car is runing back
+// HIGH  HIGH  LOW   HIGH  LOW   HIGH  Car is turning left
+// HIGH  HIGH  HIGH  LOW   HIGH  LOW   Car is turning right
+// HIGH  HIGH  LOW   LOW   LOW   LOW   Car is stoped
+// HIGH  HIGH  HIGH  HIGH  HIGH  HIGH  Car is stoped
+// LOW   LOW   N/A   N/A   N/A   N/A   Car is stoped
 
-//define L298n module IO Pin
+// define L298n module IO Pin
 #define ENA 5
 #define ENB 6
 #define IN1 7
@@ -36,7 +36,6 @@ void decelerate() {
 void throttle() {
   digitalWrite(ENA, HIGH);
   digitalWrite(ENB, HIGH);
-  delay(2000);
 }
 
 void hold() {
@@ -46,7 +45,7 @@ void hold() {
   digitalWrite(IN2, LOW);
   digitalWrite(IN3, LOW);
   digitalWrite(IN4, LOW);
-  delay(3000);
+
   Serial.println("stop");
 }
 
@@ -58,7 +57,6 @@ void forward(bool analog) {
 
   if (analog) {
     accelerate();
-    decelerate();
   }
   else {
     throttle();
@@ -75,7 +73,6 @@ void back(bool analog) {
 
   if (analog) {
     accelerate();
-    decelerate();
   }
   else {
     throttle();
@@ -116,7 +113,7 @@ void right(bool analog) {
   Serial.println("right");
 }
 
-void light() {
+void signaling() {
   digitalWrite(LED_BUILTIN, !digitalRead(LED_BUILTIN));
 
   Serial.println("light");
@@ -137,18 +134,29 @@ void setup() {
 }
 
 void loop() {
-  hold();
-  forward(true);
+  // bluetooth serial port
+  char bluetooth = Serial.read();
 
-  hold();
-  back(false);
-
-  hold();
-  left(true);
-
-  hold();
-  right(true);
-
-  light();
+  switch (bluetooth) {
+    case 'f':
+      forward(true);
+      break;
+    case 'b':
+      back(true);
+      break;
+    case 'l':
+      left(true);
+      break;
+    case 'r':
+      right(true);
+      break;
+    case 'h':
+      hold();
+      break;
+    case 's':
+      signaling();
+      break;
+    default: break;
+  }
 }
 

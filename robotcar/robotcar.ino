@@ -10,6 +10,7 @@
 // LOW   LOW   N/A   N/A   N/A   N/A   Car is stoped
 
 #include <IRremote.h>
+#include <Servo.h>
 
 // define L298n module IO Pin
 #define ENA 5
@@ -27,21 +28,31 @@
 #define IR_RIGHT 16761405
 #define IR_OK 16712445
 #define IR_ONE 16738455
+#define IR_TWO 16750695
 
 IRrecv irrecv(RECV_PIN);
 decode_results irResults;
 unsigned long irTimestampMs;
 
-void accelerate(int maxSpeed) {
-  for (int i = 100; i <= maxSpeed; i++) {
+Servo obstacleServo;
+int echo = A4;
+int trig = A5;
+int rightDistance = 0;
+int leftDistance = 0;
+int middleDistance = 0;
+bool servoActive = false;
+int maxDistance = 30;
+
+void accelerate() {
+  for (int i = 50; i <= 255; i++) {
     analogWrite(ENA, i);
     analogWrite(ENB, i);
     delay(10);
   }
 }
 
-void decelerate(int maxSpeed) {
-  for (int i = maxSpeed; i >= 100; i--) {
+void decelerate() {
+  for (int i = 255; i >= 0; i--) {
     analogWrite(ENA, i);
     analogWrite(ENB, i);
     delay(10);
@@ -71,13 +82,15 @@ void forward(bool analog) {
   digitalWrite(IN4, HIGH);
 
   if (analog) {
-    accelerate(255);
+    accelerate();
   }
   else {
     throttle();
   }
 
   Serial.println("forward");
+
+  avoidObstacle();
 }
 
 void back(bool analog) {
@@ -87,7 +100,7 @@ void back(bool analog) {
   digitalWrite(IN4, LOW);
 
   if (analog) {
-    accelerate(255);
+    accelerate();
   }
   else {
     throttle();
@@ -96,34 +109,24 @@ void back(bool analog) {
   Serial.println("back");
 }
 
-void left(bool analog) {
+void left() {
   digitalWrite(IN1, LOW);
   digitalWrite(IN2, HIGH);
   digitalWrite(IN3, LOW);
   digitalWrite(IN4, HIGH);
 
-  if (analog) {
-    accelerate(150);
-  }
-  else {
-    throttle();
-  }
+  throttle();
 
   Serial.println("left");
 }
 
-void right(bool analog) {
+void right() {
   digitalWrite(IN1, HIGH);
   digitalWrite(IN2, LOW);
   digitalWrite(IN3, HIGH);
   digitalWrite(IN4, LOW);
 
-  if (analog) {
-    accelerate(150);
-  }
-  else {
-    throttle();
-  }
+  throttle();
 
   Serial.println("right");
 }
@@ -132,6 +135,73 @@ void signaling() {
   digitalWrite(LED_BUILTIN, !digitalRead(LED_BUILTIN));
 
   Serial.println("light");
+}
+
+int measureDistance() {
+  digitalWrite(trig, LOW);
+  delayMicroseconds(2);
+  digitalWrite(trig, HIGH);
+  delayMicroseconds(20);
+  digitalWrite(trig, LOW);
+
+  float distance = pulseIn(echo, HIGH);
+  distance = distance / 58;
+
+  return (int) distance;
+}
+
+void obstacleAutoDrive() {
+  if (servoActive) {
+    obstacleServo.attach(3);
+    obstacleServo.write(90);
+    middleDistance = measureDistance();
+
+    if (middleDistance <= maxDistance) {
+      hold();
+      delay(500);
+      obstacleServo.write(10);
+      delay(1000);
+      rightDistance = measureDistance();
+
+      delay(500);
+      obstacleServo.write(90);
+      delay(1000);
+      obstacleServo.write(180);
+      delay(1000);
+      leftDistance = measureDistance();
+
+      delay(500);
+      obstacleServo.write(90);
+      delay(1000);
+
+      if (rightDistance > leftDistance) {
+        right();
+        delay(200);
+      }
+      else if (rightDistance < leftDistance) {
+        left();
+        delay(200);
+      }
+      else if ((rightDistance <= maxDistance) || (leftDistance <= maxDistance)) {
+        back(false);
+        delay(180);
+      }
+      else {
+        forward(false);
+      }
+    }
+    else {
+      forward(false);
+    }
+  }
+}
+
+void avoidObstacle() {
+  int distance = measureDistance();
+
+  if (distance <= 10) {
+    hold();
+  }
 }
 
 void controlBluetooth() {
@@ -146,16 +216,19 @@ void controlBluetooth() {
       back(true);
       break;
     case 'l':
-      left(true);
+      left();
       break;
     case 'r':
-      right(true);
+      right();
       break;
     case 'h':
       hold();
       break;
     case 's':
       signaling();
+      break;
+    case 'o':
+      servoActive = !servoActive;
       break;
     default:
       break;
@@ -178,16 +251,19 @@ void controlIr() {
         back(true);
         break;
       case IR_LEFT:
-        left(true);
+        left();
         break;
       case IR_RIGHT:
-        right(true);
+        right();
         break;
       case IR_OK:
         hold();
         break;
       case IR_ONE:
         signaling();
+        break;
+      case IR_TWO:
+        servoActive = !servoActive;
         break;
       default:
         break;
@@ -216,6 +292,10 @@ void setup() {
   pinMode(ENA, OUTPUT);
   pinMode(ENB, OUTPUT);
 
+  // servo init
+  pinMode(echo, INPUT);
+  pinMode(trig, OUTPUT);
+
   // start receiving infrared signal
   irrecv.enableIRIn();
 }
@@ -223,5 +303,6 @@ void setup() {
 void loop() {
   controlBluetooth();
   controlIr();
+  obstacleAutoDrive();
 }
 

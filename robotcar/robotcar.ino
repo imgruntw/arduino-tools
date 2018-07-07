@@ -9,6 +9,8 @@
 // HIGH  HIGH  HIGH  HIGH  HIGH  HIGH  Car is stoped
 // LOW   LOW   N/A   N/A   N/A   N/A   Car is stoped
 
+#include <IRremote.h>
+
 // define L298n module IO Pin
 #define ENA 5
 #define ENB 6
@@ -17,16 +19,29 @@
 #define IN3 9
 #define IN4 11
 
-void accelerate() {
-  for (int i = 100; i <= 255; i++) {
+// infrared signal codes
+#define RECV_PIN 12
+#define IR_UP 16736925
+#define IR_DOWN 16754775
+#define IR_LEFT 16720605
+#define IR_RIGHT 16761405
+#define IR_OK 16712445
+#define IR_ONE 16738455
+
+IRrecv irrecv(RECV_PIN);
+decode_results irResults;
+unsigned long irTimestampMs;
+
+void accelerate(int maxSpeed) {
+  for (int i = 100; i <= maxSpeed; i++) {
     analogWrite(ENA, i);
     analogWrite(ENB, i);
     delay(10);
   }
 }
 
-void decelerate() {
-  for (int i = 255; i >= 100; i--) {
+void decelerate(int maxSpeed) {
+  for (int i = maxSpeed; i >= 100; i--) {
     analogWrite(ENA, i);
     analogWrite(ENB, i);
     delay(10);
@@ -56,7 +71,7 @@ void forward(bool analog) {
   digitalWrite(IN4, HIGH);
 
   if (analog) {
-    accelerate();
+    accelerate(255);
   }
   else {
     throttle();
@@ -72,7 +87,7 @@ void back(bool analog) {
   digitalWrite(IN4, LOW);
 
   if (analog) {
-    accelerate();
+    accelerate(255);
   }
   else {
     throttle();
@@ -88,7 +103,7 @@ void left(bool analog) {
   digitalWrite(IN4, HIGH);
 
   if (analog) {
-    accelerate();
+    accelerate(150);
   }
   else {
     throttle();
@@ -104,7 +119,7 @@ void right(bool analog) {
   digitalWrite(IN4, LOW);
 
   if (analog) {
-    accelerate();
+    accelerate(150);
   }
   else {
     throttle();
@@ -119,21 +134,7 @@ void signaling() {
   Serial.println("light");
 }
 
-void setup() {
-  // open serial and set the baudrate
-  Serial.begin(9600);
-
-  // before using io pin, pin mode must be set first
-  pinMode(LED_BUILTIN, OUTPUT);
-  pinMode(IN1, OUTPUT);
-  pinMode(IN2, OUTPUT);
-  pinMode(IN3, OUTPUT);
-  pinMode(IN4, OUTPUT);
-  pinMode(ENA, OUTPUT);
-  pinMode(ENB, OUTPUT);
-}
-
-void loop() {
+void controlBluetooth() {
   // bluetooth serial port
   char bluetooth = Serial.read();
 
@@ -156,7 +157,71 @@ void loop() {
     case 's':
       signaling();
       break;
-    default: break;
+    default:
+      break;
   }
+}
+
+void controlIr() {
+  if (irrecv.decode(&irResults)) {
+    irTimestampMs = millis();
+
+    unsigned long irValue = irResults.value;
+    Serial.println(irValue);
+    irrecv.resume();
+
+    switch (irValue) {
+      case IR_UP:
+        forward(true);
+        break;
+      case IR_DOWN:
+        back(true);
+        break;
+      case IR_LEFT:
+        left(true);
+        break;
+      case IR_RIGHT:
+        right(true);
+        break;
+      case IR_OK:
+        hold();
+        break;
+      case IR_ONE:
+        signaling();
+        break;
+      default:
+        break;
+    }
+  }
+  else {
+    unsigned long pastMs = millis() - irTimestampMs;
+
+    if (pastMs > 5000) {
+      hold();
+      irTimestampMs = millis();
+    }
+  }
+}
+
+void setup() {
+  // open serial and set the baudrate
+  Serial.begin(9600);
+
+  // before using io pin, pin mode must be set first
+  pinMode(LED_BUILTIN, OUTPUT);
+  pinMode(IN1, OUTPUT);
+  pinMode(IN2, OUTPUT);
+  pinMode(IN3, OUTPUT);
+  pinMode(IN4, OUTPUT);
+  pinMode(ENA, OUTPUT);
+  pinMode(ENB, OUTPUT);
+
+  // start receiving infrared signal
+  irrecv.enableIRIn();
+}
+
+void loop() {
+  controlBluetooth();
+  controlIr();
 }
 
